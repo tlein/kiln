@@ -26,4 +26,10 @@ impl Record for Place {
     fn type_name() -> &'static str {
         "Place"
     }
+
+    fn merge(&self, old: &Self, new: &Self) -> Self {
+        return Place {
+            name: merge_field(&self.name, &old.name, &new.name).clone(),
+        };
+    }
 }

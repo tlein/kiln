@@ -48,7 +48,7 @@ impl Library {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Library, Record};
+    use crate::{merge_field, Library, Record};
     use std::{thread, time};
 
     #[test]
@@ -94,6 +94,46 @@ mod tests {
         assert_eq!(thread_count * 7, dog_catalog.get(dog_id).dog_years);
     }
 
+    #[test]
+    fn test_prototypes() {
+        let library = Library::default();
+        library.register::<Person>();
+        let catalog = library.checkout::<Person>();
+        let proto_id = catalog.create(Person::default());
+        let instance_id = catalog.create_from_prototype(proto_id);
+
+        {
+            let person = catalog.lock(proto_id);
+            let mut write = person.value.clone();
+            write.age = 20;
+            write.name = String::from("Atom");
+            catalog.commit(&person, write);
+        }
+
+        assert_eq!(String::from("Atom"), catalog.get(proto_id).name);
+        assert_eq!(String::from("Atom"), catalog.get(instance_id).name);
+
+        {
+            let person = catalog.lock(instance_id);
+            let mut write = person.value.clone();
+            write.name = String::from("Eva");
+            catalog.commit(&person, write);
+        }
+
+        assert_eq!(String::from("Atom"), catalog.get(proto_id).name);
+        assert_eq!(String::from("Eva"), catalog.get(instance_id).name);
+    }
+
+    #[test]
+    fn test_prototypes_consistency() {
+        assert_eq!(true, true);
+
+        //TODO:
+        // one thread that will constantly update the prototype and check that the prototype and child have expected state
+        // another thread that will constantly update the child and check that the updates to the child have the expected state
+        // a third thread that will constantly update the child's child and check that the updates to the child's child have the expected state
+    }
+
     #[derive(Clone, Debug, Default)]
     struct Dog {
         dog_years: i32,
@@ -102,15 +142,29 @@ mod tests {
         fn type_name() -> &'static str {
             "Dog"
         }
+
+        fn merge(&self, old: &Dog, new: &Dog) -> Dog {
+            return Dog {
+                dog_years: *merge_field(&self.dog_years, &old.dog_years, &new.dog_years),
+            };
+        }
     }
 
     #[derive(Clone, Debug, Default)]
     struct Person {
         age: i32,
+        name: String,
     }
     impl Record for Person {
         fn type_name() -> &'static str {
             "Person"
+        }
+
+        fn merge(&self, old: &Person, new: &Person) -> Person {
+            return Person {
+                age: *merge_field(&self.age, &old.age, &new.age),
+                name: merge_field(&self.name, &old.name, &new.name).clone(),
+            };
         }
     }
 }
