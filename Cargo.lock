@@ -3,3 +3,17 @@
 [[package]]
 name = "kiln"
 version = "0.1.0"
+dependencies = [
+ "kiln_internal",
+]
+
+[[package]]
+name = "kiln_data"
+version = "0.1.0"
+
+[[package]]
+name = "kiln_internal"
+version = "0.1.0"
+dependencies = [
+ "kiln_data",
+]
