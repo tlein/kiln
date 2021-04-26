@@ -130,7 +130,7 @@ where
             let instance_wrapper = self.get_internal(*instance_id, true);
             let new_instance = instance_wrapper
                 .inner
-                .merge(&old_record.inner, &new_instance.inner);
+                .proto_update(&old_record.inner, &new_instance.inner);
             self.commit_internal(*instance_id, &instance_wrapper, new_instance);
             self.unlock(*instance_id);
         }

@@ -21,7 +21,7 @@ where
 
 pub trait Record: 'static + Clone + Debug + Default + Send + Sync {
     fn type_name() -> &'static str;
-    fn merge(&self, old_prototype: &Self, new_prototype: &Self) -> Self;
+    fn proto_update(&self, old_prototype: &Self, new_prototype: &Self) -> Self;
 }
 
 pub struct Locked<'a, R>
@@ -41,7 +41,7 @@ where
     }
 }
 
-pub fn merge_field<'a, T>(
+pub fn proto_update_field<'a, T>(
     instance_field: &'a T,
     old_prototype_field: &'a T,
     new_prototype_field: &'a T,

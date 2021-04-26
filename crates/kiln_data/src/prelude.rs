@@ -1,5 +1,5 @@
 pub use crate::{
     catalog::Catalog,
     library::Library,
-    record::{merge_field, Locked, Record},
+    record::{proto_update_field, Locked, Record},
 };

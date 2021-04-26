@@ -27,9 +27,9 @@ impl Record for Place {
         "Place"
     }
 
-    fn merge(&self, old: &Self, new: &Self) -> Self {
+    fn proto_update(&self, old: &Self, new: &Self) -> Self {
         return Place {
-            name: merge_field(&self.name, &old.name, &new.name).clone(),
+            name: proto_update_field(&self.name, &old.name, &new.name).clone(),
         };
     }
 }
