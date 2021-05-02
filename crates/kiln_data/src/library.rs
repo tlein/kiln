@@ -103,16 +103,12 @@ mod tests {
         let library = Library::default();
         library.register::<Person>();
         let catalog = library.checkout::<Person>();
-        let proto_id = catalog.create(Person::default());
+        let proto_id = catalog.create(Person {
+            age: 20,
+            name: String::from("Atom"),
+            fav_food: String::from("Apples"),
+        });
         let instance_id = catalog.create_from_prototype(proto_id);
-
-        {
-            let person = catalog.lock(proto_id);
-            let mut write = person.value.clone();
-            write.age = 20;
-            write.name = String::from("Atom");
-            catalog.commit(&person, write);
-        }
 
         assert_eq!(String::from("Atom"), catalog.get(proto_id).name);
         assert_eq!(String::from("Atom"), catalog.get(instance_id).name);
