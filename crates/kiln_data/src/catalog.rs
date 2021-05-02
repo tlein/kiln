@@ -1,7 +1,7 @@
 use crate::record::{Locked, Record, RecordId, RecordWrapper};
 use std::{
     fmt::Debug,
-    sync::{Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex, MutexGuard},
 };
 
 #[derive(Default)]
@@ -9,17 +9,8 @@ pub struct Catalog<R>
 where
     R: Record,
 {
-    pub(crate) inner: Arc<CatalogInner<R>>,
+    pub(crate) state: Arc<CatalogState<R>>,
     pub(crate) reads: Mutex<Vec<Arc<RecordWrapper<R>>>>,
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct CatalogInner<R>
-where
-    R: Record,
-{
-    pub(crate) locks_cv: Condvar,
-    pub(crate) state: Mutex<CatalogState<R>>,
 }
 
 #[derive(Debug, Default)]
@@ -27,8 +18,28 @@ pub(crate) struct CatalogState<R>
 where
     R: Record,
 {
-    records: Vec<Arc<RecordWrapper<R>>>,
+    pub(crate) locks_cv: Condvar,
+    pub(crate) inner: Mutex<CatalogStateInner<R>>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ChangeRecord<R>
+where
+    R: Record,
+{
+    pub(crate) record_id: RecordId,
+    pub(crate) old_record: Option<Arc<RecordWrapper<R>>>,
+    pub(crate) new_record: Arc<RecordWrapper<R>>,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct CatalogStateInner<R>
+where
+    R: Record,
+{
     pub(crate) locks: Vec<bool>,
+    pub(crate) change_log: Vec<ChangeRecord<R>>,
+    records: Vec<Arc<RecordWrapper<R>>>,
 }
 
 impl<R> Catalog<R>
@@ -63,11 +74,14 @@ where
     }
 
     fn create_internal(&self, record_wrapper: RecordWrapper<R>) -> RecordId {
-        let mut state = self.inner.state.lock().unwrap();
+        let mut state = self.state.inner.lock().unwrap();
         let id = state.records.len();
-        state.records.push(Arc::from(record_wrapper));
+        let record_wrapper = Arc::from(record_wrapper);
+        state.records.push(record_wrapper.clone());
         state.locks.push(false);
-        RecordId(id)
+        let record_id = RecordId(id);
+        self.write_change_log(record_id, None, record_wrapper, state);
+        record_id
     }
 
     pub fn get(&self, id: RecordId) -> &R {
@@ -83,10 +97,10 @@ where
     }
 
     fn get_internal(&self, id: RecordId, lock: bool) -> Arc<RecordWrapper<R>> {
-        let mut state = self.inner.state.lock().unwrap();
+        let mut state = self.state.inner.lock().unwrap();
         if lock {
             state = self
-                .inner
+                .state
                 .locks_cv
                 .wait_while(state, |library| library.locks[id.0])
                 .unwrap();
@@ -103,17 +117,17 @@ where
     }
 
     pub fn unlock(&self, id: RecordId) {
-        let mut state = self.inner.state.lock().unwrap();
+        let mut state = self.state.inner.lock().unwrap();
         state.locks[id.0] = false;
-        self.inner.locks_cv.notify_all();
+        self.state.locks_cv.notify_all();
     }
 
     pub fn commit(&self, locked: &Locked<R>, new_record: R) {
         let old_record = self.get_internal(locked.id, false);
-        self.commit_internal(locked.id, old_record.as_ref(), new_record)
+        self.commit_internal(locked.id, old_record, new_record)
     }
 
-    fn commit_internal(&self, id: RecordId, old_record: &RecordWrapper<R>, new_record: R) {
+    fn commit_internal(&self, id: RecordId, old_record: Arc<RecordWrapper<R>>, new_record: R) {
         let old_prototype_instances = old_record.prototype_instances.lock().unwrap();
         let new_instance = Arc::from(RecordWrapper {
             prototype_id: old_record.prototype_id,
@@ -121,18 +135,36 @@ where
             inner: new_record,
         });
 
-        {
-            let mut state = self.inner.state.lock().unwrap();
-            state.records[id.0] = new_instance.clone();
-        }
+        let mut state_inner = self.state.inner.lock().unwrap();
+        state_inner.records[id.0] = new_instance.clone();
+        self.write_change_log(
+            id,
+            Some(old_record.clone()),
+            new_instance.clone(),
+            state_inner,
+        );
 
         for instance_id in old_prototype_instances.iter() {
             let instance_wrapper = self.get_internal(*instance_id, true);
             let new_instance = instance_wrapper
                 .inner
                 .proto_update(&old_record.inner, &new_instance.inner);
-            self.commit_internal(*instance_id, &instance_wrapper, new_instance);
+            self.commit_internal(*instance_id, instance_wrapper, new_instance);
             self.unlock(*instance_id);
         }
+    }
+
+    fn write_change_log(
+        &self,
+        id: RecordId,
+        old_record: Option<Arc<RecordWrapper<R>>>,
+        new_instance: Arc<RecordWrapper<R>>,
+        mut state_inner: MutexGuard<CatalogStateInner<R>>,
+    ) {
+        state_inner.change_log.push(ChangeRecord {
+            record_id: id,
+            old_record: old_record.clone(),
+            new_record: new_instance.clone(),
+        });
     }
 }

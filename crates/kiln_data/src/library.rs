@@ -1,5 +1,5 @@
 use crate::{
-    catalog::{Catalog, CatalogInner},
+    catalog::{Catalog, CatalogState},
     record::Record,
 };
 use std::{
@@ -22,7 +22,7 @@ impl Library {
     {
         self.catalogs.lock().unwrap().insert(
             R::type_name().to_string(),
-            Arc::from(CatalogInner::<R>::default()),
+            Arc::from(CatalogState::<R>::default()),
         );
     }
 
@@ -37,17 +37,17 @@ impl Library {
             .get(R::type_name())
             .unwrap()
             .clone()
-            .downcast::<CatalogInner<R>>()
+            .downcast::<CatalogState<R>>()
             .unwrap();
         Catalog {
-            inner: library_catalog,
+            state: library_catalog,
             reads: Default::default(),
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::{proto_update_field, Library, Record};
     use rand::{distributions::Alphanumeric, Rng};
     use std::{
@@ -236,8 +236,8 @@ mod tests {
     }
 
     #[derive(Clone, Debug, Default)]
-    struct Dog {
-        dog_years: i32,
+    pub(crate) struct Dog {
+        pub(crate) dog_years: i32,
     }
     impl Record for Dog {
         fn type_name() -> &'static str {
@@ -252,10 +252,10 @@ mod tests {
     }
 
     #[derive(Clone, Debug, Default)]
-    struct Person {
-        age: i32,
-        name: String,
-        fav_food: String,
+    pub(crate) struct Person {
+        pub(crate) age: i32,
+        pub(crate) name: String,
+        pub(crate) fav_food: String,
     }
     impl Record for Person {
         fn type_name() -> &'static str {
