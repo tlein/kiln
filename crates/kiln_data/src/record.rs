@@ -9,6 +9,11 @@ use std::{
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub struct RecordId(pub usize);
 
+pub trait Record: 'static + Clone + Debug + Default + Send + Sync {
+    fn type_name() -> &'static str;
+    fn proto_update(&self, old_prototype: &Self, new_prototype: &Self) -> Self;
+}
+
 #[derive(Debug)]
 pub(crate) struct RecordWrapper<R>
 where
@@ -17,11 +22,6 @@ where
     pub(crate) prototype_id: Option<RecordId>,
     pub(crate) prototype_instances: Mutex<HashSet<RecordId>>,
     pub(crate) inner: R,
-}
-
-pub trait Record: 'static + Clone + Debug + Default + Send + Sync {
-    fn type_name() -> &'static str;
-    fn proto_update(&self, old_prototype: &Self, new_prototype: &Self) -> Self;
 }
 
 pub struct Locked<'a, R>

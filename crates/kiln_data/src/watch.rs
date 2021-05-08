@@ -85,7 +85,7 @@ mod tests {
     use std::iter::FromIterator;
 
     #[test]
-    fn test_iterator() {
+    fn test_change_detection() {
         let library = Library::default();
         library.register::<Person>();
         let catalog = library.checkout::<Person>();
