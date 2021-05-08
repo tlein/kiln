@@ -2,6 +2,7 @@ use crate::catalog::{Catalog, ChangeRecord};
 use crate::record::{Record, RecordId};
 use std::{iter::Iterator, marker::PhantomData};
 
+#[derive(Copy, Clone)]
 pub struct Watermark(usize);
 
 pub struct Change<'a, R>
