@@ -146,6 +146,7 @@ impl UndoRedo {
     }
 
     pub fn pause_scope(&mut self) -> PauseScope {
+        self.consume_change_logs();
         PauseScope { undo_redo: self }
     }
 
@@ -243,6 +244,37 @@ mod tests {
 
         undo_redo.redo();
         assert_eq!(String::from("2"), catalog.get(id).name);
+    }
+
+    #[test]
+    fn test_pause_scope() {
+        let library = Library::default();
+        library.register::<Person>();
+        let mut undo_redo = UndoRedo::new(library.clone());
+        undo_redo.watch::<Person>();
+        let catalog = library.checkout::<Person>();
+
+        let id = catalog.create(Person::new(String::from("0"), 29));
+
+        {
+            let person = catalog.lock(id);
+            let mut write = person.value.clone();
+            write.name = String::from("1");
+            catalog.commit(&person, write);
+        }
+
+        assert_eq!(String::from("1"), catalog.get(id).name);
+
+        {
+            let _pause_scope = undo_redo.pause_scope();
+            let person = catalog.lock(id);
+            let mut write = person.value.clone();
+            write.name = String::from("2");
+            catalog.commit(&person, write);
+        }
+
+        undo_redo.undo();
+        assert_eq!(String::from("0"), catalog.get(id).name);
     }
 
     #[derive(Clone, Debug, Default)]
