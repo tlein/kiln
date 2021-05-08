@@ -115,5 +115,26 @@ mod tests {
 
         let changes = Vec::from_iter(catalog.changes(start_watermark, end_watermark));
         assert_eq!(3, changes.len());
+        assert_eq!(true, changes[0].inner.old_record.is_none());
+        assert_eq!(
+            String::from("Name0"),
+            changes[0].inner.new_record.inner.name
+        );
+        assert_eq!(
+            String::from("Name0"),
+            changes[1].inner.old_record.as_ref().unwrap().inner.name
+        );
+        assert_eq!(
+            String::from("Name1"),
+            changes[1].inner.new_record.inner.name
+        );
+        assert_eq!(
+            String::from("Name1"),
+            changes[2].inner.old_record.as_ref().unwrap().inner.name
+        );
+        assert_eq!(
+            String::from("Name2"),
+            changes[2].inner.new_record.inner.name
+        );
     }
 }
