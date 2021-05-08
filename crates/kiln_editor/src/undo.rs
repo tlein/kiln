@@ -1,11 +1,12 @@
 use kiln_data::{Library, Record, RecordId, Watermark};
-use std::{boxed::Box, marker::PhantomData};
+use std::{boxed::Box, fmt::Debug, marker::PhantomData};
 
-trait Undoable {
+trait Undoable: Debug {
     fn undo(&mut self, library: &Library);
     fn redo(&mut self, library: &Library);
 }
 
+#[derive(Debug)]
 struct UndoRecord<R>
 where
     R: Record,
@@ -20,10 +21,10 @@ where
     R: Record,
 {
     fn undo(&mut self, library: &Library) {
-        if let Some(record) = &self.old_record {
+        if let Some(old_record) = &self.old_record {
             let catalog = library.checkout::<R>();
             let lock = catalog.lock(self.record_id);
-            catalog.commit(&lock, record.clone());
+            catalog.commit(&lock, old_record.clone());
         }
     }
 
@@ -35,7 +36,8 @@ where
 }
 
 trait Watcher {
-    fn consume_change_log(&self, library: &Library) -> Vec<Box<dyn Undoable>>;
+    fn consume_change_log(&mut self, library: &Library) -> Vec<Box<dyn Undoable>>;
+    fn drop_pause_scope(&mut self, library: &Library);
 }
 struct WatcherState<R>
 where
@@ -63,11 +65,11 @@ impl<R> Watcher for WatcherState<R>
 where
     R: Record,
 {
-    fn consume_change_log(&self, library: &Library) -> Vec<Box<dyn Undoable>> {
+    fn consume_change_log(&mut self, library: &Library) -> Vec<Box<dyn Undoable>> {
         let catalog = library.checkout::<R>();
         let new_watermark = catalog.watermark();
         let mut undoables: Vec<Box<dyn Undoable>> = vec![];
-        for change in catalog.changes(self.cur_watermark, new_watermark) {
+        for change in catalog.changes(self.cur_watermark, new_watermark.clone()) {
             undoables.push(Box::from(UndoRecord {
                 record_id: change.record_id(),
                 old_record: match change.old_record() {
@@ -78,7 +80,25 @@ where
             }));
         }
 
+        self.cur_watermark = new_watermark.clone();
+
         return undoables;
+    }
+
+    fn drop_pause_scope(&mut self, library: &Library) {
+        let catalog = library.checkout::<R>();
+        let new_watermark = catalog.watermark();
+        self.cur_watermark = new_watermark.clone();
+    }
+}
+
+pub struct PauseScope<'a> {
+    undo_redo: &'a mut UndoRedo,
+}
+
+impl Drop for PauseScope<'_> {
+    fn drop(&mut self) {
+        self.undo_redo.drop_pause_scope();
     }
 }
 
@@ -112,6 +132,7 @@ impl UndoRedo {
         if let Some(mut top) = self.undo_stack.pop() {
             top.undo(&self.library);
             self.redo_stack.push(top);
+            self.drop_pause_scope();
         }
     }
 
@@ -120,6 +141,18 @@ impl UndoRedo {
         if let Some(mut top) = self.redo_stack.pop() {
             top.redo(&self.library);
             self.undo_stack.push(top);
+            self.drop_pause_scope();
+        }
+    }
+
+    pub fn pause_scope(&mut self) -> PauseScope {
+        self.consume_change_logs();
+        PauseScope { undo_redo: self }
+    }
+
+    fn drop_pause_scope(&mut self) {
+        for watcher in &mut self.watchers {
+            watcher.drop_pause_scope(&self.library);
         }
     }
 
@@ -127,10 +160,11 @@ impl UndoRedo {
         // TODO #4 (https://github.com/tlein/kiln/issues/4):
         // be aware of commit timestamps to preserve modification order between
         // catalogs
-        for watcher in &self.watchers {
+        for watcher in &mut self.watchers {
             let new_changes = &mut watcher.consume_change_log(&self.library);
-            // TODO #5 (https://github.com/tlein/kiln/issues/5)
-            // if new_changes contains non-undo changes, then clear redo_stack
+            if new_changes.len() > 0 {
+                self.redo_stack.clear();
+            }
             self.undo_stack.append(new_changes);
         }
     }
@@ -149,22 +183,98 @@ mod tests {
         undo_redo.watch::<Person>();
         let catalog = library.checkout::<Person>();
 
-        let id = catalog.create(Person::new(String::from("Tucker"), 29));
+        let id = catalog.create(Person::new(String::from("0"), 29));
 
         {
             let person = catalog.lock(id);
             let mut write = person.value.clone();
-            write.name = String::from("TuckerWrongName");
+            write.name = String::from("1");
             catalog.commit(&person, write);
         }
 
-        assert_eq!(String::from("TuckerWrongName"), catalog.get(id).name);
+        assert_eq!(String::from("1"), catalog.get(id).name);
 
         undo_redo.undo();
-        assert_eq!(String::from("Tucker"), catalog.get(id).name);
+        assert_eq!(String::from("0"), catalog.get(id).name);
 
         undo_redo.redo();
-        assert_eq!(String::from("TuckerWrongName"), catalog.get(id).name);
+        assert_eq!(String::from("1"), catalog.get(id).name);
+
+        {
+            let person = catalog.lock(id);
+            let mut write = person.value.clone();
+            write.name = String::from("2");
+            catalog.commit(&person, write);
+        }
+
+        undo_redo.undo();
+        assert_eq!(String::from("1"), catalog.get(id).name);
+        undo_redo.undo();
+        assert_eq!(String::from("0"), catalog.get(id).name);
+    }
+
+    #[test]
+    fn test_clear_redo_stack() {
+        let library = Library::default();
+        library.register::<Person>();
+        let mut undo_redo = UndoRedo::new(library.clone());
+        undo_redo.watch::<Person>();
+        let catalog = library.checkout::<Person>();
+
+        let id = catalog.create(Person::new(String::from("0"), 29));
+
+        {
+            let person = catalog.lock(id);
+            let mut write = person.value.clone();
+            write.name = String::from("1");
+            catalog.commit(&person, write);
+        }
+
+        assert_eq!(String::from("1"), catalog.get(id).name);
+
+        undo_redo.undo();
+        assert_eq!(String::from("0"), catalog.get(id).name);
+
+        {
+            let person = catalog.lock(id);
+            let mut write = person.value.clone();
+            write.name = String::from("2");
+            catalog.commit(&person, write);
+        }
+
+        undo_redo.redo();
+        assert_eq!(String::from("2"), catalog.get(id).name);
+    }
+
+    #[test]
+    fn test_pause_scope() {
+        let library = Library::default();
+        library.register::<Person>();
+        let mut undo_redo = UndoRedo::new(library.clone());
+        undo_redo.watch::<Person>();
+        let catalog = library.checkout::<Person>();
+
+        let id = catalog.create(Person::new(String::from("0"), 29));
+
+        {
+            let person = catalog.lock(id);
+            let mut write = person.value.clone();
+            write.name = String::from("1");
+            catalog.commit(&person, write);
+        }
+
+        assert_eq!(String::from("1"), catalog.get(id).name);
+
+        {
+            let _pause_scope = undo_redo.pause_scope();
+            let person = catalog.lock(id);
+            let mut write = person.value.clone();
+            write.name = String::from("2");
+            catalog.commit(&person, write);
+        }
+
+        undo_redo.undo();
+        assert_eq!(String::from("0"), catalog.get(id).name);
     }
 
     #[derive(Clone, Debug, Default)]
