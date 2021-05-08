@@ -277,10 +277,49 @@ mod tests {
         assert_eq!(String::from("0"), catalog.get(id).name);
     }
 
+    #[test]
+    fn test_multiple_record_type_order() {
+        let library = Library::default();
+        library.register::<Person>();
+        library.register::<Dog>();
+        let mut undo_redo = UndoRedo::new(library.clone());
+        undo_redo.watch::<Person>();
+        undo_redo.watch::<Dog>();
+        let person_catalog = library.checkout::<Person>();
+        let dog_catalog = library.checkout::<Dog>();
+
+        let person_id = person_catalog.create(Person::new(String::from("Tucker"), 29));
+        let dog_id = dog_catalog.create(Dog::new(String::from("Red Heeler")));
+
+        {
+            let dog = dog_catalog.lock(dog_id);
+            let mut write = dog.value.clone();
+            write.breed = String::from("Blue Heeler");
+            dog_catalog.commit(&dog, write);
+        }
+
+        {
+            let person = person_catalog.lock(person_id);
+            let mut write = person.value.clone();
+            write.name = String::from("Jim");
+            person_catalog.commit(&person, write);
+        }
+
+        undo_redo.undo();
+
+        assert_eq!(String::from("Tucker"), person_catalog.get(person_id).name);
+        assert_eq!(String::from("Blue Heeler"), dog_catalog.get(dog_id).breed);
+
+        undo_redo.undo();
+
+        assert_eq!(String::from("Tucker"), person_catalog.get(person_id).name);
+        assert_eq!(String::from("Red Heeler"), dog_catalog.get(dog_id).breed);
+    }
+
     #[derive(Clone, Debug, Default)]
-    pub(crate) struct Person {
-        pub(crate) age: i32,
-        pub(crate) name: String,
+    struct Person {
+        age: i32,
+        name: String,
     }
     impl Person {
         fn new(name: String, age: i32) -> Person {
@@ -296,6 +335,26 @@ mod tests {
             return Person {
                 age: *proto_update_field(&self.age, &old.age, &new.age),
                 name: proto_update_field(&self.name, &old.name, &new.name).clone(),
+            };
+        }
+    }
+    #[derive(Clone, Debug, Default)]
+    struct Dog {
+        breed: String,
+    }
+    impl Dog {
+        fn new(breed: String) -> Dog {
+            Dog { breed }
+        }
+    }
+    impl Record for Dog {
+        fn type_name() -> &'static str {
+            "Dog"
+        }
+
+        fn proto_update(&self, old: &Dog, new: &Dog) -> Dog {
+            return Dog {
+                breed: proto_update_field(&self.breed, &old.breed, &new.breed).clone(),
             };
         }
     }
