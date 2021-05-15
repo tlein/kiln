@@ -257,15 +257,6 @@ pub(crate) mod tests {
         pub(crate) name: String,
         pub(crate) fav_food: String,
     }
-    impl Person {
-        fn new(name: String, age: i32) -> Person {
-            Person {
-                name,
-                age,
-                fav_food: String::default(),
-            }
-        }
-    }
     impl Record for Person {
         fn type_name() -> &'static str {
             "Person"
