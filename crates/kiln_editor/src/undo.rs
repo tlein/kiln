@@ -72,10 +72,7 @@ where
         for change in catalog.changes(self.cur_watermark, new_watermark) {
             undoables.push(Box::from(UndoRecord {
                 record_id: change.record_id(),
-                old_record: match change.old_record() {
-                    Some(record_ref) => Some(record_ref.clone()),
-                    None => None,
-                },
+                old_record: change.old_record().cloned(),
                 new_record: change.new_record().clone(),
             }));
         }

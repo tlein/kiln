@@ -22,10 +22,7 @@ where
     }
 
     pub fn old_record(&self) -> Option<&R> {
-        match &self.inner.old_record {
-            None => None,
-            Some(r) => Some(&r.inner),
-        }
+        self.inner.old_record.as_ref().map(|r| &r.inner)
     }
 
     pub fn new_record(&self) -> &R {
