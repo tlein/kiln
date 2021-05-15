@@ -113,7 +113,10 @@ where
 
     fn unwrap_record_wrapper(&self, record_wrapper: &Arc<RecordWrapper<R>>) -> &R {
         self.reads.lock().unwrap().push(record_wrapper.clone());
-        unsafe { &Arc::as_ptr(record_wrapper).as_ref().unwrap().clone().inner }
+        unsafe {
+            let record_ref = Arc::as_ptr(record_wrapper).as_ref().unwrap();
+            &<&RecordWrapper<R>>::clone(&record_ref).inner
+        }
     }
 
     pub fn unlock(&self, id: RecordId) {

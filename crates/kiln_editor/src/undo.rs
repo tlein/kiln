@@ -69,7 +69,7 @@ where
         let catalog = library.checkout::<R>();
         let new_watermark = catalog.watermark();
         let mut undoables: Vec<Box<dyn Undoable>> = vec![];
-        for change in catalog.changes(self.cur_watermark, new_watermark.clone()) {
+        for change in catalog.changes(self.cur_watermark, new_watermark) {
             undoables.push(Box::from(UndoRecord {
                 record_id: change.record_id(),
                 old_record: match change.old_record() {
@@ -80,15 +80,15 @@ where
             }));
         }
 
-        self.cur_watermark = new_watermark.clone();
+        self.cur_watermark = new_watermark;
 
-        return undoables;
+        undoables
     }
 
     fn drop_pause_scope(&mut self, library: &Library) {
         let catalog = library.checkout::<R>();
         let new_watermark = catalog.watermark();
-        self.cur_watermark = new_watermark.clone();
+        self.cur_watermark = new_watermark;
     }
 }
 
@@ -162,7 +162,7 @@ impl UndoRedo {
         // catalogs
         for watcher in &mut self.watchers {
             let new_changes = &mut watcher.consume_change_log(&self.library);
-            if new_changes.len() > 0 {
+            if !new_changes.is_empty() {
                 self.redo_stack.clear();
             }
             self.undo_stack.append(new_changes);
