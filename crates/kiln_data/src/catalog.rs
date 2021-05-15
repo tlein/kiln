@@ -158,13 +158,13 @@ where
         &self,
         id: RecordId,
         old_record: Option<Arc<RecordWrapper<R>>>,
-        new_instance: Arc<RecordWrapper<R>>,
+        new_record: Arc<RecordWrapper<R>>,
         mut state_inner: MutexGuard<CatalogStateInner<R>>,
     ) {
         state_inner.change_log.push(ChangeRecord {
             record_id: id,
-            old_record: old_record.clone(),
-            new_record: new_instance.clone(),
+            old_record,
+            new_record,
         });
     }
 }
