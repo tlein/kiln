@@ -1,4 +1,4 @@
-use kiln_data::{Library, Record, RecordId, Watermark};
+use macaw_data::{Library, Record, RecordId, Watermark};
 use std::{boxed::Box, fmt::Debug, marker::PhantomData};
 
 trait Undoable: Debug {
@@ -154,7 +154,7 @@ impl UndoRedo {
     }
 
     fn consume_change_logs(&mut self) {
-        // TODO #4 (https://github.com/tlein/kiln/issues/4):
+        // TODO #4 (https://github.com/tlein/macaw/issues/4):
         // be aware of commit timestamps to preserve modification order between
         // catalogs
         for watcher in &mut self.watchers {
@@ -170,7 +170,7 @@ impl UndoRedo {
 #[cfg(test)]
 mod tests {
     use crate::UndoRedo;
-    use kiln_data::{proto_update_field, Library, Record};
+    use macaw_data::{proto_update_field, Library, Record};
 
     #[test]
     fn test_undo_redo() {

@@ -7,16 +7,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'kiln'",
+            "name": "Debug unit tests in library 'macaw'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=kiln"
+                    "--package=macaw"
                 ],
                 "filter": {
-                    "name": "kiln",
+                    "name": "macaw",
                     "kind": "lib"
                 }
             },
@@ -31,7 +31,7 @@
                 "args": [
                     "build",
                     "--example=hello_world",
-                    "--package=kiln"
+                    "--package=macaw"
                 ],
                 "filter": {
                     "name": "hello_world",
@@ -50,7 +50,7 @@
                     "test",
                     "--no-run",
                     "--example=hello_world",
-                    "--package=kiln"
+                    "--package=macaw"
                 ],
                 "filter": {
                     "name": "hello_world",

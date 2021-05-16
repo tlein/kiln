@@ -18,39 +18,39 @@ dependencies = [
 ]
 
 [[package]]
-name = "kiln"
+name = "libc"
+version = "0.2.94"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18794a8ad5b29321f790b55d93dfba91e125cb1a9edbd4f8e3150acc771c1a5e"
+
+[[package]]
+name = "macaw"
 version = "0.1.0"
 dependencies = [
- "kiln_internal",
+ "macaw_internal",
 ]
 
 [[package]]
-name = "kiln_data"
+name = "macaw_data"
 version = "0.1.0"
 dependencies = [
  "rand",
 ]
 
 [[package]]
-name = "kiln_editor"
+name = "macaw_editor"
 version = "0.1.0"
 dependencies = [
- "kiln_data",
+ "macaw_data",
 ]
 
 [[package]]
-name = "kiln_internal"
+name = "macaw_internal"
 version = "0.1.0"
 dependencies = [
- "kiln_data",
- "kiln_editor",
+ "macaw_data",
+ "macaw_editor",
 ]
-
-[[package]]
-name = "libc"
-version = "0.2.94"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18794a8ad5b29321f790b55d93dfba91e125cb1a9edbd4f8e3150acc771c1a5e"
 
 [[package]]
 name = "ppv-lite86"

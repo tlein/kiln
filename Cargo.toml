@@ -1,5 +1,5 @@
 [package]
-name = "kiln"
+name = "macaw"
 version = "0.1.0"
 authors = ["Tucker Lein <self@tuckerle.in>"]
 edition = "2018"
@@ -9,7 +9,7 @@ license = "MIT"
 members = ["crates/*"]
 
 [dependencies]
-kiln_internal = {path = "crates/kiln_internal", version = "0.1.0" }
+macaw_internal = {path = "crates/macaw_internal", version = "0.1.0" }
 
 [[example]]
 name = "hello_world"

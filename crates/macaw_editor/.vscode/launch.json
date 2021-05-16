@@ -7,16 +7,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'kiln_editor'",
+            "name": "Debug unit tests in library 'macaw_editor'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=kiln_editor"
+                    "--package=macaw_editor"
                 ],
                 "filter": {
-                    "name": "kiln_editor",
+                    "name": "macaw_editor",
                     "kind": "lib"
                 }
             },

@@ -7,16 +7,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'kiln_data'",
+            "name": "Debug unit tests in library 'macaw_data'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=kiln_data"
+                    "--package=macaw_data"
                 ],
                 "filter": {
-                    "name": "kiln_data",
+                    "name": "macaw_data",
                     "kind": "lib"
                 }
             },
