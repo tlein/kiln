@@ -1,0 +1,11 @@
+[package]
+name = "macaw_internal"
+version = "0.1.0"
+authors = ["Tucker Lein <self@tuckerle.in>"]
+edition = "2018"
+license = "MIT"
+
+[dependencies]
+# macaw
+macaw_data = { path = "../macaw_data", version = "0.1.0" }
+macaw_editor = { path = "../macaw_editor", version = "0.1.0" }
