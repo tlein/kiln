@@ -180,7 +180,7 @@ mod tests {
         undo_redo.watch::<Person>();
         let catalog = library.checkout::<Person>();
 
-        let id = catalog.create(Person::new(String::from("0"), 29));
+        let id = catalog.create(Person::new(29, String::from("0")));
 
         {
             let person = catalog.lock(id);
@@ -218,7 +218,7 @@ mod tests {
         undo_redo.watch::<Person>();
         let catalog = library.checkout::<Person>();
 
-        let id = catalog.create(Person::new(String::from("0"), 29));
+        let id = catalog.create(Person::new(29, String::from("0")));
 
         {
             let person = catalog.lock(id);
@@ -251,7 +251,7 @@ mod tests {
         undo_redo.watch::<Person>();
         let catalog = library.checkout::<Person>();
 
-        let id = catalog.create(Person::new(String::from("0"), 29));
+        let id = catalog.create(Person::new(29, String::from("0")));
 
         {
             let person = catalog.lock(id);
@@ -280,8 +280,8 @@ mod tests {
         pub(crate) name: String,
     }
     impl Person {
-        fn new(name: String, age: i32) -> Person {
-            Person { name, age }
+        fn new(age: i32, name: String) -> Person {
+            Person { age, name }
         }
     }
     impl Record for Person {

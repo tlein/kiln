@@ -80,7 +80,6 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{tests::Person, Library};
-    use std::iter::FromIterator;
 
     #[test]
     fn test_change_detection() {
@@ -111,7 +110,9 @@ mod tests {
 
         let end_watermark = catalog.watermark();
 
-        let changes = Vec::from_iter(catalog.changes(start_watermark, end_watermark));
+        let changes = catalog
+            .changes(start_watermark, end_watermark)
+            .collect::<Vec<_>>();
         assert_eq!(3, changes.len());
         assert_eq!(true, changes[0].inner.old_record.is_none());
         assert_eq!(
