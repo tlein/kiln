@@ -1,11 +1,10 @@
 [package]
-name = "kiln_data"
+name = "macaw_editor"
 version = "0.1.0"
 authors = ["Tucker Lein <self@tuckerle.in>"]
 edition = "2018"
 license = "MIT"
 
 [dependencies]
-
-[dev-dependencies]
-rand = "0.8.3"
+# macaw
+macaw_data = { path = "../macaw_data", version = "0.1.0" }

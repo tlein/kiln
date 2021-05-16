@@ -1,4 +1,4 @@
-use kiln_data::{Library, Record, RecordId, Watermark};
+use macaw_data::{Library, Record, RecordId, Watermark};
 use std::{boxed::Box, fmt::Debug, marker::PhantomData};
 
 trait Undoable: Debug {
@@ -69,26 +69,23 @@ where
         let catalog = library.checkout::<R>();
         let new_watermark = catalog.watermark();
         let mut undoables: Vec<Box<dyn Undoable>> = vec![];
-        for change in catalog.changes(self.cur_watermark, new_watermark.clone()) {
+        for change in catalog.changes(self.cur_watermark, new_watermark) {
             undoables.push(Box::from(UndoRecord {
                 record_id: change.record_id(),
-                old_record: match change.old_record() {
-                    Some(record_ref) => Some(record_ref.clone()),
-                    None => None,
-                },
+                old_record: change.old_record().cloned(),
                 new_record: change.new_record().clone(),
             }));
         }
 
-        self.cur_watermark = new_watermark.clone();
+        self.cur_watermark = new_watermark;
 
-        return undoables;
+        undoables
     }
 
     fn drop_pause_scope(&mut self, library: &Library) {
         let catalog = library.checkout::<R>();
         let new_watermark = catalog.watermark();
-        self.cur_watermark = new_watermark.clone();
+        self.cur_watermark = new_watermark;
     }
 }
 
@@ -157,12 +154,12 @@ impl UndoRedo {
     }
 
     fn consume_change_logs(&mut self) {
-        // TODO #4 (https://github.com/tlein/kiln/issues/4):
+        // TODO #4 (https://github.com/tlein/macaw/issues/4):
         // be aware of commit timestamps to preserve modification order between
         // catalogs
         for watcher in &mut self.watchers {
             let new_changes = &mut watcher.consume_change_log(&self.library);
-            if new_changes.len() > 0 {
+            if !new_changes.is_empty() {
                 self.redo_stack.clear();
             }
             self.undo_stack.append(new_changes);
@@ -173,7 +170,7 @@ impl UndoRedo {
 #[cfg(test)]
 mod tests {
     use crate::UndoRedo;
-    use kiln_data::{proto_update_field, Library, Record};
+    use macaw_data::{proto_update_field, Library, Record};
 
     #[test]
     fn test_undo_redo() {

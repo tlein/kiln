@@ -113,7 +113,10 @@ where
 
     fn unwrap_record_wrapper(&self, record_wrapper: &Arc<RecordWrapper<R>>) -> &R {
         self.reads.lock().unwrap().push(record_wrapper.clone());
-        unsafe { &Arc::as_ptr(record_wrapper).as_ref().unwrap().clone().inner }
+        unsafe {
+            let record_ref = Arc::as_ptr(record_wrapper).as_ref().unwrap();
+            &<&RecordWrapper<R>>::clone(&record_ref).inner
+        }
     }
 
     pub fn unlock(&self, id: RecordId) {
@@ -158,13 +161,13 @@ where
         &self,
         id: RecordId,
         old_record: Option<Arc<RecordWrapper<R>>>,
-        new_instance: Arc<RecordWrapper<R>>,
+        new_record: Arc<RecordWrapper<R>>,
         mut state_inner: MutexGuard<CatalogStateInner<R>>,
     ) {
         state_inner.change_log.push(ChangeRecord {
             record_id: id,
-            old_record: old_record.clone(),
-            new_record: new_instance.clone(),
+            old_record,
+            new_record,
         });
     }
 }
