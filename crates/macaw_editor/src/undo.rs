@@ -41,9 +41,36 @@ where
     }
 }
 
+#[derive(Debug)]
+struct UndoableBundle {
+    undoables: Vec<Box<dyn Undoable>>,
+}
+
+impl Undoable for UndoableBundle {
+    fn undo(&mut self, library: &Library) {
+        for undoable in &mut self.undoables.iter_mut().rev() {
+            (*undoable).undo(library);
+        }
+    }
+
+    fn redo(&mut self, library: &Library) {
+        for undoable in &mut self.undoables {
+            (*undoable).redo(library);
+        }
+    }
+
+    fn lsn(&self) -> u64 {
+        if self.undoables.is_empty() {
+            panic!("UndoableBundle cannot be empty!");
+        }
+
+        self.undoables.last().unwrap().lsn()
+    }
+}
+
 trait Watcher {
     fn consume_change_log(&mut self, library: &Library) -> Vec<Box<dyn Undoable>>;
-    fn drop_pause_scope(&mut self, library: &Library);
+    fn advance_watermark(&mut self, library: &Library);
 }
 struct WatcherState<R>
 where
@@ -89,7 +116,7 @@ where
         undoables
     }
 
-    fn drop_pause_scope(&mut self, library: &Library) {
+    fn advance_watermark(&mut self, library: &Library) {
         let catalog = library.checkout::<R>();
         let new_watermark = catalog.watermark();
         self.cur_watermark = new_watermark;
@@ -102,7 +129,17 @@ pub struct PauseScope<'a> {
 
 impl Drop for PauseScope<'_> {
     fn drop(&mut self) {
-        self.undo_redo.drop_pause_scope();
+        self.undo_redo.advance_watermarks();
+    }
+}
+
+pub struct CombineScope<'a> {
+    undo_redo: &'a mut UndoRedo,
+}
+
+impl Drop for CombineScope<'_> {
+    fn drop(&mut self) {
+        self.undo_redo.drop_combine_scope();
     }
 }
 
@@ -136,7 +173,7 @@ impl UndoRedo {
         if let Some(mut top) = self.undo_stack.pop() {
             top.undo(&self.library);
             self.redo_stack.push(top);
-            self.drop_pause_scope();
+            self.advance_watermarks();
         }
     }
 
@@ -145,7 +182,7 @@ impl UndoRedo {
         if let Some(mut top) = self.redo_stack.pop() {
             top.redo(&self.library);
             self.undo_stack.push(top);
-            self.drop_pause_scope();
+            self.advance_watermarks();
         }
     }
 
@@ -154,13 +191,31 @@ impl UndoRedo {
         PauseScope { undo_redo: self }
     }
 
-    fn drop_pause_scope(&mut self) {
+    pub fn combine_scope(&mut self) -> CombineScope {
+        self.consume_change_logs();
+        CombineScope { undo_redo: self }
+    }
+
+    fn advance_watermarks(&mut self) {
         for watcher in &mut self.watchers {
-            watcher.drop_pause_scope(&self.library);
+            watcher.advance_watermark(&self.library);
+        }
+    }
+
+    fn drop_combine_scope(&mut self) {
+        let undoables = self.undoables_for_consumption();
+        if !undoables.is_empty() {
+            self.undo_stack
+                .push(Box::from(UndoableBundle { undoables }));
         }
     }
 
     fn consume_change_logs(&mut self) {
+        let mut undoables = self.undoables_for_consumption();
+        self.undo_stack.append(&mut undoables);
+    }
+
+    fn undoables_for_consumption(&mut self) -> Vec<Box<dyn Undoable>> {
         let mut undoables: Vec<Box<dyn Undoable>> = Default::default();
         for watcher in &mut self.watchers {
             let new_changes = &mut watcher.consume_change_log(&self.library);
@@ -170,7 +225,8 @@ impl UndoRedo {
             undoables.append(new_changes);
         }
         undoables.sort_by(|a, b| a.lsn().partial_cmp(&b.lsn()).unwrap());
-        self.undo_stack.append(&mut undoables);
+
+        undoables
     }
 }
 
@@ -279,6 +335,48 @@ mod tests {
 
         undo_redo.undo();
         assert_eq!(String::from("0"), catalog.get(id).name);
+        undo_redo.redo();
+        assert_eq!(String::from("1"), catalog.get(id).name);
+    }
+
+    #[test]
+    fn test_combine_scope() {
+        let library = Library::default();
+        library.register::<Person>();
+        let mut undo_redo = UndoRedo::new(library.clone());
+        undo_redo.watch::<Person>();
+        let catalog = library.checkout::<Person>();
+
+        let id = catalog.create(Person::new(29, String::from("0")));
+
+        {
+            let person = catalog.lock(id);
+            let mut write = person.value.clone();
+            write.name = String::from("1");
+            catalog.commit(&person, write);
+        }
+
+        assert_eq!(String::from("1"), catalog.get(id).name);
+
+        {
+            let _combine_scope = undo_redo.combine_scope();
+            let person = catalog.lock(id);
+            let mut write = person.value.clone();
+            write.name = String::from("2");
+            catalog.commit(&person, write);
+            let mut write = person.value.clone();
+            write.name = String::from("3");
+            catalog.commit(&person, write);
+            let mut write = person.value.clone();
+            write.name = String::from("4");
+            catalog.commit(&person, write);
+        }
+
+        undo_redo.undo();
+        assert_eq!(String::from("1"), catalog.get(id).name);
+
+        undo_redo.redo();
+        assert_eq!(String::from("4"), catalog.get(id).name);
     }
 
     #[test]
