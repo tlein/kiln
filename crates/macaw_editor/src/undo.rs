@@ -4,6 +4,7 @@ use std::{boxed::Box, fmt::Debug, marker::PhantomData};
 trait Undoable: Debug {
     fn undo(&mut self, library: &Library);
     fn redo(&mut self, library: &Library);
+    fn lsn(&self) -> u64;
 }
 
 #[derive(Debug)]
@@ -14,6 +15,7 @@ where
     pub record_id: RecordId,
     pub old_record: Option<R>,
     pub new_record: R,
+    pub lsn: u64,
 }
 
 impl<R> Undoable for UndoRecord<R>
@@ -32,6 +34,10 @@ where
         let catalog = library.checkout::<R>();
         let lock = catalog.lock(self.record_id);
         catalog.commit(&lock, self.new_record.clone());
+    }
+
+    fn lsn(&self) -> u64 {
+        self.lsn
     }
 }
 
@@ -74,6 +80,7 @@ where
                 record_id: change.record_id(),
                 old_record: change.old_record().cloned(),
                 new_record: change.new_record().clone(),
+                lsn: change.lsn(),
             }));
         }
 
@@ -154,16 +161,16 @@ impl UndoRedo {
     }
 
     fn consume_change_logs(&mut self) {
-        // TODO #4 (https://github.com/tlein/macaw/issues/4):
-        // be aware of commit timestamps to preserve modification order between
-        // catalogs
+        let mut undoables: Vec<Box<dyn Undoable>> = Default::default();
         for watcher in &mut self.watchers {
             let new_changes = &mut watcher.consume_change_log(&self.library);
             if !new_changes.is_empty() {
                 self.redo_stack.clear();
             }
-            self.undo_stack.append(new_changes);
+            undoables.append(new_changes);
         }
+        undoables.sort_by(|a, b| a.lsn().partial_cmp(&b.lsn()).unwrap());
+        self.undo_stack.append(&mut undoables);
     }
 }
 

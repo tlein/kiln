@@ -1,4 +1,7 @@
-use crate::record::{Locked, Record, RecordId, RecordWrapper};
+use crate::{
+    library::Sequencer,
+    record::{Locked, Record, RecordId, RecordWrapper},
+};
 use std::{
     fmt::Debug,
     sync::{Arc, Condvar, Mutex, MutexGuard},
@@ -11,6 +14,7 @@ where
 {
     pub(crate) state: Arc<CatalogState<R>>,
     pub(crate) reads: Mutex<Vec<Arc<RecordWrapper<R>>>>,
+    pub(crate) sequencer: Sequencer,
 }
 
 #[derive(Debug, Default)]
@@ -28,6 +32,7 @@ where
     R: Record,
 {
     pub(crate) record_id: RecordId,
+    pub lsn: u64,
     pub(crate) old_record: Option<Arc<RecordWrapper<R>>>,
     pub(crate) new_record: Arc<RecordWrapper<R>>,
 }
@@ -164,10 +169,12 @@ where
         new_record: Arc<RecordWrapper<R>>,
         mut state_inner: MutexGuard<CatalogStateInner<R>>,
     ) {
+        let lsn = self.sequencer.next();
         state_inner.change_log.push(ChangeRecord {
             record_id: id,
             old_record,
             new_record,
+            lsn,
         });
     }
 }

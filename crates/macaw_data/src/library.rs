@@ -7,12 +7,13 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     marker::{Send, Sync},
-    sync::{Arc, Mutex},
+    sync::{atomic::AtomicU64, atomic::Ordering, Arc, Mutex},
 };
 
 #[derive(Clone, Debug, Default)]
 pub struct Library {
     pub catalogs: Arc<Mutex<HashMap<String, Arc<dyn Any + Send + Sync>>>>,
+    sequencer: Sequencer,
 }
 
 impl Library {
@@ -42,7 +43,19 @@ impl Library {
         Catalog {
             state: library_catalog,
             reads: Default::default(),
+            sequencer: self.sequencer.clone(),
         }
+    }
+}
+
+#[derive(Default, Clone, Debug)]
+pub(crate) struct Sequencer {
+    next_lsn: Arc<AtomicU64>,
+}
+
+impl Sequencer {
+    pub fn next(&self) -> u64 {
+        self.next_lsn.fetch_add(1, Ordering::Relaxed)
     }
 }
 
