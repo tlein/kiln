@@ -28,6 +28,10 @@ where
     pub fn new_record(&self) -> &R {
         &self.inner.new_record.inner
     }
+
+    pub fn lsn(&self) -> u64 {
+        self.inner.lsn
+    }
 }
 
 pub struct CatalogIterator<'a, R>

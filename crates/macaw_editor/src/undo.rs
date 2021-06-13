@@ -4,6 +4,7 @@ use std::{boxed::Box, fmt::Debug, marker::PhantomData};
 trait Undoable: Debug {
     fn undo(&mut self, library: &Library);
     fn redo(&mut self, library: &Library);
+    fn lsn(&self) -> u64;
 }
 
 #[derive(Debug)]
@@ -14,6 +15,7 @@ where
     pub record_id: RecordId,
     pub old_record: Option<R>,
     pub new_record: R,
+    pub lsn: u64,
 }
 
 impl<R> Undoable for UndoRecord<R>
@@ -32,6 +34,10 @@ where
         let catalog = library.checkout::<R>();
         let lock = catalog.lock(self.record_id);
         catalog.commit(&lock, self.new_record.clone());
+    }
+
+    fn lsn(&self) -> u64 {
+        self.lsn
     }
 }
 
@@ -74,6 +80,7 @@ where
                 record_id: change.record_id(),
                 old_record: change.old_record().cloned(),
                 new_record: change.new_record().clone(),
+                lsn: change.lsn(),
             }));
         }
 
@@ -154,16 +161,16 @@ impl UndoRedo {
     }
 
     fn consume_change_logs(&mut self) {
-        // TODO #4 (https://github.com/tlein/macaw/issues/4):
-        // be aware of commit timestamps to preserve modification order between
-        // catalogs
+        let mut undoables: Vec<Box<dyn Undoable>> = Default::default();
         for watcher in &mut self.watchers {
             let new_changes = &mut watcher.consume_change_log(&self.library);
             if !new_changes.is_empty() {
                 self.redo_stack.clear();
             }
-            self.undo_stack.append(new_changes);
+            undoables.append(new_changes);
         }
+        undoables.sort_by(|a, b| a.lsn().partial_cmp(&b.lsn()).unwrap());
+        self.undo_stack.append(&mut undoables);
     }
 }
 
@@ -274,10 +281,49 @@ mod tests {
         assert_eq!(String::from("0"), catalog.get(id).name);
     }
 
+    #[test]
+    fn test_multiple_record_type_order() {
+        let library = Library::default();
+        library.register::<Person>();
+        library.register::<Dog>();
+        let mut undo_redo = UndoRedo::new(library.clone());
+        undo_redo.watch::<Person>();
+        undo_redo.watch::<Dog>();
+        let person_catalog = library.checkout::<Person>();
+        let dog_catalog = library.checkout::<Dog>();
+
+        let person_id = person_catalog.create(Person::new(29, String::from("Tucker")));
+        let dog_id = dog_catalog.create(Dog::new(String::from("Red Heeler")));
+
+        {
+            let dog = dog_catalog.lock(dog_id);
+            let mut write = dog.value.clone();
+            write.breed = String::from("Blue Heeler");
+            dog_catalog.commit(&dog, write);
+        }
+
+        {
+            let person = person_catalog.lock(person_id);
+            let mut write = person.value.clone();
+            write.name = String::from("Jim");
+            person_catalog.commit(&person, write);
+        }
+
+        undo_redo.undo();
+
+        assert_eq!(String::from("Tucker"), person_catalog.get(person_id).name);
+        assert_eq!(String::from("Blue Heeler"), dog_catalog.get(dog_id).breed);
+
+        undo_redo.undo();
+
+        assert_eq!(String::from("Tucker"), person_catalog.get(person_id).name);
+        assert_eq!(String::from("Red Heeler"), dog_catalog.get(dog_id).breed);
+    }
+
     #[derive(Clone, Debug, Default)]
-    pub(crate) struct Person {
-        pub(crate) age: i32,
-        pub(crate) name: String,
+    struct Person {
+        age: i32,
+        name: String,
     }
     impl Person {
         fn new(age: i32, name: String) -> Person {
@@ -293,6 +339,26 @@ mod tests {
             return Person {
                 age: *proto_update_field(&self.age, &old.age, &new.age),
                 name: proto_update_field(&self.name, &old.name, &new.name).clone(),
+            };
+        }
+    }
+    #[derive(Clone, Debug, Default)]
+    struct Dog {
+        breed: String,
+    }
+    impl Dog {
+        fn new(breed: String) -> Dog {
+            Dog { breed }
+        }
+    }
+    impl Record for Dog {
+        fn type_name() -> &'static str {
+            "Dog"
+        }
+
+        fn proto_update(&self, old: &Dog, new: &Dog) -> Dog {
+            return Dog {
+                breed: proto_update_field(&self.breed, &old.breed, &new.breed).clone(),
             };
         }
     }

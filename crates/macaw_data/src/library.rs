@@ -7,12 +7,13 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     marker::{Send, Sync},
-    sync::{Arc, Mutex},
+    sync::{atomic::AtomicU64, atomic::Ordering, Arc, Mutex},
 };
 
 #[derive(Clone, Debug, Default)]
 pub struct Library {
     pub catalogs: Arc<Mutex<HashMap<String, Arc<dyn Any + Send + Sync>>>>,
+    sequencer: Sequencer,
 }
 
 impl Library {
@@ -42,7 +43,19 @@ impl Library {
         Catalog {
             state: library_catalog,
             reads: Default::default(),
+            sequencer: self.sequencer.clone(),
         }
+    }
+}
+
+#[derive(Default, Clone, Debug)]
+pub(crate) struct Sequencer {
+    next_lsn: Arc<AtomicU64>,
+}
+
+impl Sequencer {
+    pub fn next(&self) -> u64 {
+        self.next_lsn.fetch_add(1, Ordering::Relaxed)
     }
 }
 
@@ -51,6 +64,7 @@ pub(crate) mod tests {
     use crate::{proto_update_field, Library, Record};
     use rand::{distributions::Alphanumeric, Rng};
     use std::{
+        collections::HashSet,
         thread,
         time::{Duration, Instant},
     };
@@ -232,6 +246,63 @@ pub(crate) mod tests {
             catalog.get(grandmother_id).fav_food
         );
         assert_eq!(String::from("Pasta"), catalog.get(mother_id).fav_food);
+    }
+
+    #[test]
+    fn test_unique_lsn() {
+        let library = Library::default();
+        library.register::<Person>();
+
+        let person_catalog = library.checkout::<Person>();
+        let person_id = person_catalog.create(Person::default());
+
+        library.register::<Dog>();
+        let dog_catalog = library.checkout::<Dog>();
+        let dog_id = dog_catalog.create(Dog::default());
+
+        let thread_one = thread::spawn({
+            let library_copy = library.clone();
+            move || {
+                let start = Instant::now();
+                while start.elapsed() < Duration::from_millis(50) {
+                    let person_catalog = library_copy.checkout::<Person>();
+                    let locked_person = person_catalog.lock(person_id);
+                    let mut writable_person = locked_person.value.clone();
+                    writable_person.age += 1;
+                    person_catalog.commit(&locked_person, writable_person);
+                }
+            }
+        });
+
+        let thread_two = thread::spawn({
+            let library_copy = library;
+            move || {
+                let start = Instant::now();
+                while start.elapsed() < Duration::from_millis(50) {
+                    let dog_catalog = library_copy.checkout::<Dog>();
+                    let locked_dog = dog_catalog.lock(dog_id);
+                    let mut writable_dog = locked_dog.value.clone();
+                    writable_dog.dog_years += 7;
+                    dog_catalog.commit(&locked_dog, writable_dog);
+                }
+            }
+        });
+
+        thread_one.join().unwrap();
+        thread_two.join().unwrap();
+
+        let mut lsn_hash_set: HashSet<u64> = Default::default();
+        let state_inner = person_catalog.state.inner.lock().unwrap();
+        for change_record in &state_inner.change_log {
+            assert!(!lsn_hash_set.contains(&change_record.lsn));
+            lsn_hash_set.insert(change_record.lsn);
+        }
+
+        let state_inner = dog_catalog.state.inner.lock().unwrap();
+        for change_record in &state_inner.change_log {
+            assert!(!lsn_hash_set.contains(&change_record.lsn));
+            lsn_hash_set.insert(change_record.lsn);
+        }
     }
 
     #[derive(Clone, Debug, Default)]
