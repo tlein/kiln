@@ -275,7 +275,7 @@ pub(crate) mod tests {
         });
 
         let thread_two = thread::spawn({
-            let library_copy = library.clone();
+            let library_copy = library;
             move || {
                 let start = Instant::now();
                 while start.elapsed() < Duration::from_millis(50) {
