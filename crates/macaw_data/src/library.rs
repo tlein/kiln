@@ -75,14 +75,14 @@ pub(crate) mod tests {
                         let person_catalog = library_copy.checkout::<Person>();
                         let locked_person = person_catalog.lock(person_id);
                         let mut writable_person = locked_person.value.clone();
-                        writable_person.age = writable_person.age + 1;
+                        writable_person.age += 1;
                         thread::sleep(Duration::from_millis(1));
                         person_catalog.commit(&locked_person, writable_person);
 
                         let dog_catalog = library_copy.checkout::<Dog>();
                         let locked_dog = dog_catalog.lock(dog_id);
                         let mut writable_dog = locked_dog.value.clone();
-                        writable_dog.dog_years = writable_dog.dog_years + 7;
+                        writable_dog.dog_years += 7;
                         thread::sleep(Duration::from_millis(1));
                         dog_catalog.commit(&locked_dog, writable_dog);
                     }
@@ -198,9 +198,8 @@ pub(crate) mod tests {
         // and check that the daughter's favorite food is updated while the mother's
         // and grandmother's favorite food remains the same.
         let thread3 = thread::spawn({
-            let library_copy = library.clone();
             move || {
-                let catalog = library_copy.checkout::<Person>();
+                let catalog = library.checkout::<Person>();
                 let start = Instant::now();
                 while start.elapsed() < Duration::from_millis(50) {
                     let rand_food: String = rand::thread_rng()
