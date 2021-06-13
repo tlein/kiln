@@ -32,7 +32,7 @@ where
     R: Record,
 {
     pub(crate) record_id: RecordId,
-    pub lsn: u64,
+    pub(crate) lsn: u64,
     pub(crate) old_record: Option<Arc<RecordWrapper<R>>>,
     pub(crate) new_record: Arc<RecordWrapper<R>>,
 }
