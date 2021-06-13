@@ -285,7 +285,7 @@ mod tests {
         let person_catalog = library.checkout::<Person>();
         let dog_catalog = library.checkout::<Dog>();
 
-        let person_id = person_catalog.create(Person::new(String::from("Tucker"), 29));
+        let person_id = person_catalog.create(Person::new(29, String::from("Tucker")));
         let dog_id = dog_catalog.create(Dog::new(String::from("Red Heeler")));
 
         {
